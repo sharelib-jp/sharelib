@@ -47,6 +47,9 @@ type PriorityPool struct {
 	stopped       bool
 	sequence      uint16
 	lastTimestamp time.Time
+	// queuedJobs holds jobs that have been submitted but not yet taken by workers.
+	// Access must be protected by p.mu.
+	queuedJobs []Job
 }
 
 func NewPriorityPool(bufferSize int) (*PriorityPool, error) {
@@ -161,17 +164,21 @@ func (p *PriorityPool) SubmitHigh(job Job) error {
 		return ErrPoolStopped
 	}
 
-	// Generate unique Snowflake ID with incrementing sequence
+	// Generate unique Snowflake ID with incrementing sequence (requires lock)
 	id, err := p.generateJobID()
 	if err != nil {
 		p.mu.Unlock()
 		return fmt.Errorf("failed to generate Snowflake ID: %w", err)
 	}
-	p.mu.Unlock()
 
 	job.ID = id
 	job.Time = time.Now()
 	job.Priority = "High"
+
+	// Track queued jobs separately to allow safe snapshots without draining channels.
+	p.queuedJobs = append(p.queuedJobs, job)
+	p.mu.Unlock()
+
 	p.highChan <- job
 	return nil
 }
@@ -183,58 +190,48 @@ func (p *PriorityPool) SubmitLow(job Job) error {
 		return ErrPoolStopped
 	}
 
-	// Generate unique Snowflake ID with incrementing sequence
+	// Generate unique Snowflake ID with incrementing sequence (requires lock)
 	id, err := p.generateJobID()
 	if err != nil {
 		p.mu.Unlock()
 		return fmt.Errorf("failed to generate Snowflake ID: %w", err)
 	}
-	p.mu.Unlock()
 
 	job.ID = id
 	job.Time = time.Now()
 	job.Priority = "Low"
+
+	// Track queued jobs separately to allow safe snapshots without draining channels.
+	p.queuedJobs = append(p.queuedJobs, job)
+	p.mu.Unlock()
+
 	p.lowChan <- job
 	return nil
 }
 
 func (p *PriorityPool) ListJobs() ([]Job, error) {
 	p.mu.RLock()
-	stopped := p.stopped
-	p.mu.RUnlock()
-	if stopped {
+	defer p.mu.RUnlock()
+	if p.stopped {
 		return nil, ErrPoolStopped
 	}
 
-	var jobs []Job
+	// Return a copy of the queued jobs snapshot maintained in-memory.
+	out := make([]Job, len(p.queuedJobs))
+	copy(out, p.queuedJobs)
+	return out, nil
+}
 
-	// Drain channels non-blocking to take a snapshot of queued jobs.
-	drain := func(ch chan Job) []Job {
-		var s []Job
-		for {
-			select {
-			case j := <-ch:
-				s = append(s, j)
-			default:
-				return s
-			}
+// removeQueuedJob removes the first queued job with the given ID.
+func (p *PriorityPool) removeQueuedJob(id lib.SnowflakeId) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i, j := range p.queuedJobs {
+		if j.ID.Int64() == id.Int64() {
+			p.queuedJobs = append(p.queuedJobs[:i], p.queuedJobs[i+1:]...)
+			return
 		}
 	}
-
-	high := drain(p.highChan)
-	low := drain(p.lowChan)
-
-	// Re-queue items to preserve original state (best-effort snapshot).
-	for _, j := range high {
-		p.highChan <- j
-	}
-	for _, j := range low {
-		p.lowChan <- j
-	}
-
-	jobs = append(jobs, high...)
-	jobs = append(jobs, low...)
-	return jobs, nil
 }
 
 // generateJobID generates a unique Snowflake ID with monotonic sequence.
