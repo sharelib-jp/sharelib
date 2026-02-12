@@ -214,16 +214,22 @@ func (p *PriorityPool) SubmitLow(job Job) error {
 	return nil
 }
 
-func (p *PriorityPool) ListJobs() ([]*Job, error) {
+func (p *PriorityPool) ListJobs() ([]Job, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if p.stopped {
 		return nil, ErrPoolStopped
 	}
 
-	// Return a copy of the queued jobs snapshot maintained in-memory.
-	out := make([]*Job, len(p.queuedJobs))
-	copy(out, p.queuedJobs)
+	// Return a full copy (by value) of the queued jobs snapshot maintained in-memory.
+	out := make([]Job, len(p.queuedJobs))
+	for i, j := range p.queuedJobs {
+		if j == nil {
+			// leave zero value
+			continue
+		}
+		out[i] = *j
+	}
 	return out, nil
 }
 
