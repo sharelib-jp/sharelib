@@ -39,8 +39,8 @@ type Job struct {
 }
 
 type PriorityPool struct {
-	highChan      chan Job
-	lowChan       chan Job
+	highChan      chan *Job
+	lowChan       chan *Job
 	wg            sync.WaitGroup
 	quit          chan struct{}
 	mu            sync.RWMutex
@@ -49,7 +49,7 @@ type PriorityPool struct {
 	lastTimestamp time.Time
 	// queuedJobs holds jobs that have been submitted but not yet taken by workers.
 	// Access must be protected by p.mu.
-	queuedJobs []Job
+	queuedJobs []*Job
 }
 
 func NewPriorityPool(bufferSize int) (*PriorityPool, error) {
@@ -57,8 +57,8 @@ func NewPriorityPool(bufferSize int) (*PriorityPool, error) {
 		return nil, ErrInvalidBufferSize
 	}
 	return &PriorityPool{
-		highChan: make(chan Job, bufferSize),
-		lowChan:  make(chan Job, bufferSize),
+		highChan: make(chan *Job, bufferSize),
+		lowChan:  make(chan *Job, bufferSize),
 		quit:     make(chan struct{}),
 	}, nil
 }
@@ -88,6 +88,7 @@ func (p *PriorityPool) worker(id int) {
 	for {
 		select {
 		case job := <-p.highChan:
+			p.removeQueuedJob(job.ID)
 			p.runJob(id, "High", job)
 			continue
 		default:
@@ -95,8 +96,10 @@ func (p *PriorityPool) worker(id int) {
 
 		select {
 		case job := <-p.highChan:
+			p.removeQueuedJob(job.ID)
 			p.runJob(id, "High", job)
 		case job := <-p.lowChan:
+			p.removeQueuedJob(job.ID)
 			p.runJob(id, "Low", job)
 		case <-p.quit:
 			slog.Info("Worker stopping", slog.Int("workerID", id))
@@ -105,7 +108,7 @@ func (p *PriorityPool) worker(id int) {
 	}
 }
 
-func (p *PriorityPool) runJob(workerID int, priority string, job Job) {
+func (p *PriorityPool) runJob(workerID int, priority string, job *Job) {
 	slog.Info("Job started",
 		slog.Int64("jobID", job.ID.Int64()),
 		slog.String("priority", priority),
@@ -176,10 +179,11 @@ func (p *PriorityPool) SubmitHigh(job Job) error {
 	job.Priority = "High"
 
 	// Track queued jobs separately to allow safe snapshots without draining channels.
-	p.queuedJobs = append(p.queuedJobs, job)
+	jp := &job
+	p.queuedJobs = append(p.queuedJobs, jp)
 	p.mu.Unlock()
 
-	p.highChan <- job
+	p.highChan <- jp
 	return nil
 }
 
@@ -202,14 +206,15 @@ func (p *PriorityPool) SubmitLow(job Job) error {
 	job.Priority = "Low"
 
 	// Track queued jobs separately to allow safe snapshots without draining channels.
-	p.queuedJobs = append(p.queuedJobs, job)
+	jp := &job
+	p.queuedJobs = append(p.queuedJobs, jp)
 	p.mu.Unlock()
 
-	p.lowChan <- job
+	p.lowChan <- jp
 	return nil
 }
 
-func (p *PriorityPool) ListJobs() ([]Job, error) {
+func (p *PriorityPool) ListJobs() ([]*Job, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if p.stopped {
@@ -217,7 +222,7 @@ func (p *PriorityPool) ListJobs() ([]Job, error) {
 	}
 
 	// Return a copy of the queued jobs snapshot maintained in-memory.
-	out := make([]Job, len(p.queuedJobs))
+	out := make([]*Job, len(p.queuedJobs))
 	copy(out, p.queuedJobs)
 	return out, nil
 }

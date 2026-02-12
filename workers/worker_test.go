@@ -37,6 +37,7 @@ func TestSingleExecuteOnlyLow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to start pool: %v", err)
 	}
+	defer pool.Stop()
 
 	for i := range 100 {
 		count := i
@@ -55,8 +56,6 @@ func TestSingleExecuteOnlyLow(t *testing.T) {
 
 	// Wait for all jobs to complete
 	time.Sleep(11 * time.Second)
-
-	pool.Stop()
 }
 
 // 高優先度ジョブが低優先度ジョブよりも先に実行されることを確認するテスト
@@ -131,7 +130,7 @@ func TestHighPriorityPreemptsLow(t *testing.T) {
 	if order[1] != "high" {
 		t.Fatalf("expected high to run second, got order=%v", order)
 	}
-	pool.Stop()
+	defer pool.Stop()
 }
 
 // タイムアウトが正しく動作することを確認するテスト
@@ -183,7 +182,7 @@ func TestTimeoutBehavior(t *testing.T) {
 	case <-time.After(500 * time.Millisecond):
 	}
 
-	pool.Stop()
+	defer pool.Stop()
 }
 
 // 並列実行が正しく動作することを確認するテスト
@@ -218,7 +217,7 @@ func TestParallelExecuteOnlyLow(t *testing.T) {
 	// Wait for all jobs to complete
 	time.Sleep(5 * time.Second)
 
-	pool.Stop()
+	defer pool.Stop()
 }
 
 // 並列実行が正しく動作することを確認するテスト
@@ -265,5 +264,5 @@ func TestParallelExecute(t *testing.T) {
 	// Wait for all jobs to complete
 	time.Sleep(5 * time.Second)
 
-	pool.Stop()
+	defer pool.Stop()
 }
