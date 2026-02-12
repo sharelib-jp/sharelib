@@ -9,7 +9,7 @@ import (
 func TestSnowflakeIDGenerationWithDefaultConfig(t *testing.T) {
 	cfg := DefaultSnowflakeConfig()
 	timestamp := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	sequence := uint8(5)
+	sequence := uint16(5)
 
 	id, err := GenerateSnowflakeID(cfg, timestamp, sequence)
 	if err != nil {
@@ -25,7 +25,7 @@ func TestSnowflakeIDGenerationWithDefaultConfig(t *testing.T) {
 func TestSnowflakeIDDecompositionWithDefaultConfig(t *testing.T) {
 	cfg := DefaultSnowflakeConfig()
 	timestamp := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	sequence := uint8(10)
+	sequence := uint16(10)
 
 	id, err := GenerateSnowflakeID(cfg, timestamp, sequence)
 	if err != nil {

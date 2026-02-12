@@ -37,7 +37,7 @@ func DefaultSnowflakeConfig() SnowflakeBitConfig {
 	}
 }
 
-func GenerateSnowflakeID(cfg SnowflakeBitConfig, timestamp time.Time, sequence uint8) (SnowflakeId, error) {
+func GenerateSnowflakeID(cfg SnowflakeBitConfig, timestamp time.Time, sequence uint16) (SnowflakeId, error) {
 	if err := CheckSnowflakeConfig(cfg); err != nil {
 		return 0, err
 	}
@@ -66,8 +66,8 @@ func ParseSnowflakeID(id int64) SnowflakeId {
 	return SnowflakeId(id)
 }
 
-func (id SnowflakeId) Decompose(cfg SnowflakeBitConfig) (prefix uint8, timestamp time.Time, machineID int64, sequence uint8) {
-	sequence = uint8(int64(id) & ((1 << cfg.SequenceBits) - 1))
+func (id SnowflakeId) Decompose(cfg SnowflakeBitConfig) (prefix uint8, timestamp time.Time, machineID int64, sequence uint16) {
+	sequence = uint16(int64(id) & ((1 << cfg.SequenceBits) - 1))
 	machineID = (int64(id) >> cfg.SequenceBits) & ((1 << cfg.MachineIDBits) - 1)
 	timeDiff := (int64(id) >> (cfg.MachineIDBits + cfg.SequenceBits)) & ((1 << cfg.TimeStampBits) - 1)
 	prefix = uint8((int64(id) >> (cfg.TimeStampBits + cfg.MachineIDBits + cfg.SequenceBits)) & ((1 << cfg.PrefixBits) - 1))
@@ -90,7 +90,7 @@ func (id SnowflakeId) GetMachineID(cfg SnowflakeBitConfig) int64 {
 	return machineID
 }
 
-func (id SnowflakeId) GetSequence(cfg SnowflakeBitConfig) uint8 {
+func (id SnowflakeId) GetSequence(cfg SnowflakeBitConfig) uint16 {
 	_, _, _, sequence := id.Decompose(cfg)
 	return sequence
 }

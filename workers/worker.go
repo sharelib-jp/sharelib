@@ -45,7 +45,7 @@ type PriorityPool struct {
 	quit          chan struct{}
 	mu            sync.RWMutex
 	stopped       bool
-	sequence      uint8
+	sequence      uint16
 	lastTimestamp time.Time
 }
 
@@ -247,7 +247,7 @@ func (p *PriorityPool) generateJobID() (lib.SnowflakeId, error) {
 	if currentMs.Equal(p.lastTimestamp) {
 		p.sequence++
 		// Check for sequence overflow
-		maxSequence := uint8((1 << jobIdConfig.SequenceBits) - 1)
+		maxSequence := uint16((1 << jobIdConfig.SequenceBits) - 1)
 		if p.sequence > maxSequence {
 			// Wait for next millisecond
 			time.Sleep(time.Millisecond)
