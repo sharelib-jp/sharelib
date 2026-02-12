@@ -137,11 +137,21 @@ func (p *PriorityPool) runJob(workerID int, priority string, job *Job) {
 			close(done)
 		}()
 
+		timer := time.NewTimer(job.TimeOut)
+		defer func() {
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+		}()
+
 		select {
 		case <-done:
 			job.Status = 0b0010 // completed
 			slog.Info("Job completed", slog.Int64("jobID", job.ID.Int64()))
-		case <-time.After(job.TimeOut):
+		case <-timer.C:
 			slog.Warn("Job timed out", slog.Int64("jobID", job.ID.Int64()), slog.String("priority", priority))
 			job.Status = 0b0100 // failed
 		}
