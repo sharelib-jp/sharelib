@@ -267,11 +267,16 @@ func (p *PriorityPool) generateJobID() (lib.SnowflakeId, error) {
 		// Check for sequence overflow
 		maxSequence := uint16((1 << jobIdConfig.SequenceBits) - 1)
 		if p.sequence > maxSequence {
-			// Wait for next millisecond
-			time.Sleep(time.Millisecond)
-			now = time.Now()
-			currentMs = now.Truncate(time.Millisecond)
-			p.sequence = 0
+			// Sequence overflow: wait until we observe a strictly later millisecond
+			for {
+				time.Sleep(time.Millisecond)
+				now = time.Now()
+				currentMs = now.Truncate(time.Millisecond)
+				if currentMs.After(p.lastTimestamp) {
+					p.sequence = 0
+					break
+				}
+			}
 		}
 	} else {
 		// New millisecond, reset sequence
